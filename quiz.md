@@ -1,9 +1,9 @@
 ---
 description: RPG-style teach-back quiz on your changes, with a boss fight (defaults to current branch vs main)
-argument-hint: [branch | A..B | commit | path | stats]
+argument-hint: [branch | A..B | commit | path | stats | help] [easy | hard]
 ---
 
-First: if $ARGUMENTS is exactly `stats`, jump to STATS below and do nothing else.
+First: if $ARGUMENTS is exactly `help` (or `-h`, `--help`, `?`), print the HELP text below verbatim and do nothing else (no git commands, no file reads). If it is exactly `stats`, jump to STATS below and do nothing else.
 Otherwise, decide what to quiz on, in this order:
 1. If $ARGUMENTS is given, use it as the target: a branch (diff `BASE...BRANCH`), a range (`A..B`), a commit, or a path. A bare branch name means diff against the base branch.
 2. Otherwise, if the current branch is not the base branch, diff the whole branch against it with `git diff BASE...HEAD` (three dots, so only changes made on this branch show up, not newer commits on the base).
@@ -27,8 +27,20 @@ RULES (strict):
 - If the user replies "skip", reveal the answer and take damage.
 - Always reference code as `relative/path/file.ext:LINE` so it is clickable.
 
-QUESTIONS: test real understanding: edge cases, why something is ordered a certain way, what breaks if X is removed. 3 questions total.
-Pick a format per question, whichever fits the code best, and don't use the same format twice in a row:
+QUESTIONS: 3 questions that ramp up in difficulty:
+1. Warm-up: multiple choice (3 options, labeled A/B/C) about what a piece of the code does.
+2. Medium: why something is written the way it is.
+3. Hard: an edge case, or what breaks if something is removed.
+
+Question rules:
+- One concept per question. Never ask compound questions ("what... and why...").
+- Keep each question to 2-3 sentences.
+- Always show the relevant 3-8 line snippet inline, plus its `path:LINE` link, so the user never has to hunt for it. Never assume deep domain knowledge that the snippet doesn't hint at.
+- Adapt as you go: after a miss, a skip, or a confidence of 2 or below, make the next question easier. After a confident correct answer, make it harder.
+- DIFFICULTY ARGUMENT: if $ARGUMENTS ends with the word `easy`, make all 3 questions multiple choice. If it ends with `hard`, skip the warm-up and ask 3 medium-to-hard questions. Strip that word from $ARGUMENTS before resolving the target above (so `/quiz feature/login hard` quizzes on `feature/login`, and `/quiz easy` quizzes on the default target).
+
+Formats: pick whichever fits the code best for questions 2 and 3, and don't use the same format twice in a row (question 1 is always `mc`):
+- mc: multiple choice, as above.
 - predict: give a specific input and ask what the code returns or does. Best for edge cases (0, empty, null, boundaries).
 - bug: describe a small hypothetical change (lines swapped, a check removed) and ask what breaks.
 - order: list real steps from the code in scrambled order and ask for the order they actually run. Only when the diff has a genuine sequence (pipelines, middleware, setup/teardown). Skip otherwise.
@@ -58,8 +70,40 @@ END: final level, how well confidence matched reality, and one file:line worth r
 
 CALIBRATION LOG:
 - Right after grading each answer (not at the end, so quitting midway still counts), append one JSON line to `~/.claude/quiz/log.jsonl` using Bash (`mkdir -p ~/.claude/quiz` first). Do this silently; don't narrate it.
-- Fields: `ts` (ISO 8601), `repo` (basename of the git toplevel), `branch`, `target` (what was quizzed, e.g. `main...feature/login`), `kind` (`question` or `boss`), `format` (`predict`, `bug`, `order`, `explain`; omit for the boss), `confidence` (1-5, or null for the boss), `result` (`correct`, `wrong`, `skipped`; for the boss: `defended`, `conceded`, `rejected`, `none`; add `"tier": "minor|major|critical"` and `"mimic": true` when it applies), `file` (the main `path:LINE` involved).
+- Fields: `ts` (ISO 8601), `repo` (basename of the git toplevel), `branch`, `target` (what was quizzed, e.g. `main...feature/login`), `kind` (`question` or `boss`), `format` (`mc`, `predict`, `bug`, `order`, `explain`; omit for the boss), `difficulty` (`easy`, `normal`, `hard`), `confidence` (1-5, or null for the boss), `result` (`correct`, `wrong`, `skipped`; for the boss: `defended`, `conceded`, `rejected`, `none`; add `"tier": "minor|major|critical"` and `"mimic": true` when it applies), `file` (the main `path:LINE` involved).
 - A "hint" before a correct answer still logs `correct`, plus `"hinted": true`.
 - If the write fails, mention it in one line and carry on with the quiz.
 
 STATS: if $ARGUMENTS is exactly `stats`, skip the quiz entirely. Do NOT read the raw log into context. Compute the numbers with one shell command (`jq` if available, otherwise `python3`) and work from its output only. Show: total runs and questions, accuracy overall and per confidence level 1-5 (flag overconfidence where high-confidence accuracy is below ~70%, and underconfidence where low-confidence accuracy is above ~70%), boss record (defended/conceded), and the 3 files that appear most in wrong answers. If the log is missing or has fewer than 5 entries, say so and stop. Don't pad with made-up numbers.
+HELP (print exactly this, then stop):
+```
+/quiz — RPG teach-back quiz on your own changes
+
+WHAT IT DOES
+  3 questions about your diff (warm-up -> medium -> hard), then a boss
+  if the code has something genuinely questionable. Reply with your
+  answer + a confidence rating 1-5, e.g. "B, 4".
+
+USAGE
+  /quiz                    current branch vs main (on main: staged diff, else last commit)
+  /quiz feature/login      that branch vs main
+  /quiz main..HEAD~2       an explicit range
+  /quiz abc1234            a single commit
+  /quiz src/auth/          only changes under a path
+  /quiz easy | hard        easy = all multiple choice, hard = no warm-up
+  /quiz feature/login hard combine a target with a difficulty
+  /quiz stats              your calibration (accuracy vs confidence)
+  /quiz help               this screen
+
+DURING A QUIZ
+  hint   one small nudge
+  skip   reveal the answer (you take damage)
+  Boss:  DEFEND your code with a real reason, or CONCEDE and take a rewrite
+         quest ("quest done" when you've fixed it).
+  Bosses are not guaranteed. Rarely a boss is a mimic: code that only
+  looks wrong. Don't concede too fast.
+
+LIMITS
+  Large diffs are capped at 5 files / 300 lines each to keep it cheap.
+  Your results log to ~/.claude/quiz/log.jsonl.
+```
