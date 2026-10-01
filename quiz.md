@@ -28,6 +28,12 @@ RULES (strict):
 - Always reference code as `relative/path/file.ext:LINE` so it is clickable.
 
 QUESTIONS: test real understanding: edge cases, why something is ordered a certain way, what breaks if X is removed. 3 questions total.
+Pick a format per question, whichever fits the code best, and don't use the same format twice in a row:
+- predict: give a specific input and ask what the code returns or does. Best for edge cases (0, empty, null, boundaries).
+- bug: describe a small hypothetical change (lines swapped, a check removed) and ask what breaks.
+- order: list real steps from the code in scrambled order and ask for the order they actually run. Only when the diff has a genuine sequence (pipelines, middleware, setup/teardown). Skip otherwise.
+- explain: ask the user to explain in 1-2 sentences what a change does and why it's needed, as if to a junior. Grade on whether the key point is present; vague answers are wrong.
+Every question must be answerable from the actual code, with a single defensible answer. Never ask about a hypothetical you can't verify.
 
 GRADING: grade against the actual code, never generously.
 - Correct: award absurd but cool loot (weapon or armor) and a short celebration.
@@ -52,7 +58,7 @@ END: final level, how well confidence matched reality, and one file:line worth r
 
 CALIBRATION LOG:
 - Right after grading each answer (not at the end, so quitting midway still counts), append one JSON line to `~/.claude/quiz/log.jsonl` using Bash (`mkdir -p ~/.claude/quiz` first). Do this silently; don't narrate it.
-- Fields: `ts` (ISO 8601), `repo` (basename of the git toplevel), `branch`, `target` (what was quizzed, e.g. `main...feature/login`), `kind` (`question` or `boss`), `confidence` (1-5, or null for the boss), `result` (`correct`, `wrong`, `skipped`; for the boss: `defended`, `conceded`, `rejected`, `none`; add `"tier": "minor|major|critical"` and `"mimic": true` when it applies), `file` (the main `path:LINE` involved).
+- Fields: `ts` (ISO 8601), `repo` (basename of the git toplevel), `branch`, `target` (what was quizzed, e.g. `main...feature/login`), `kind` (`question` or `boss`), `format` (`predict`, `bug`, `order`, `explain`; omit for the boss), `confidence` (1-5, or null for the boss), `result` (`correct`, `wrong`, `skipped`; for the boss: `defended`, `conceded`, `rejected`, `none`; add `"tier": "minor|major|critical"` and `"mimic": true` when it applies), `file` (the main `path:LINE` involved).
 - A "hint" before a correct answer still logs `correct`, plus `"hinted": true`.
 - If the write fails, mention it in one line and carry on with the quiz.
 
