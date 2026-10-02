@@ -1,6 +1,6 @@
 ---
 description: RPG-style teach-back quiz on your changes, with a boss fight (defaults to current branch vs main)
-argument-hint: [branch | A..B | commit | path | hero | stats | help] [easy | hard]
+argument-hint: "[branch | A..B | commit | path | hero | stats | help] [easy | hard]"
 ---
 
 First: if $ARGUMENTS is exactly `help` (or `-h`, `--help`, `?`), print the HELP text below verbatim and do nothing else (no git commands, no file reads). If it is exactly `stats`, jump to STATS below and do nothing else. If it is exactly `hero`, jump to HERO below and do nothing else.
