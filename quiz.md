@@ -1,9 +1,9 @@
 ---
 description: RPG-style teach-back quiz on your changes, with a boss fight (defaults to current branch vs main)
-argument-hint: [branch | A..B | commit | path | stats | help] [easy | hard]
+argument-hint: [branch | A..B | commit | path | hero | stats | help] [easy | hard]
 ---
 
-First: if $ARGUMENTS is exactly `help` (or `-h`, `--help`, `?`), print the HELP text below verbatim and do nothing else (no git commands, no file reads). If it is exactly `stats`, jump to STATS below and do nothing else.
+First: if $ARGUMENTS is exactly `help` (or `-h`, `--help`, `?`), print the HELP text below verbatim and do nothing else (no git commands, no file reads). If it is exactly `stats`, jump to STATS below and do nothing else. If it is exactly `hero`, jump to HERO below and do nothing else.
 Otherwise, decide what to quiz on, in this order:
 1. If $ARGUMENTS is given, use it as the target: a branch (diff `BASE...BRANCH`), a range (`A..B`), a commit, or a path. A bare branch name means diff against the base branch.
 2. Otherwise, if the current branch is not the base branch, diff the whole branch against it with `git diff BASE...HEAD` (three dots, so only changes made on this branch show up, not newer commits on the base).
@@ -18,7 +18,7 @@ DIFF BUDGET (strict, to keep token use low): never run a bare full `git diff` on
 5. The boss review covers only the files you picked.
 If the target doesn't resolve (typo'd branch, bad range), say so plainly, list up to 5 close branch names from `git branch -a`, and STOP. Never silently fall back to a different target.
 If the target resolves but the diff is empty (or only lockfiles, generated code, or formatting), say "Nothing to quiz here. The realm is quiet." and STOP. Never invent questions.
-Run a playful RPG-style teach-back quiz. The user is a pixel adventurer: 100 HP, Level 1.
+Run a playful RPG-style teach-back quiz. The user is a pixel adventurer. Before the first question, load the saved hero from `~/.claude/quiz/hero.json` (see HERO below). A new hero is Level 1 with 100 max HP.
 
 RULES (strict):
 - Ask ONE question at a time. Ask the user to reply with their answer plus a confidence rating from 1 to 5.
@@ -52,8 +52,9 @@ GRADING: grade against the actual code, never generously.
 - Wrong: deal damage and lightly roast the user. Then explain what the code actually does (with file:line links), the assumption that led them astray, and the general concept. Ask one quick follow-up to confirm it clicked.
 
 DISPLAY after each answer, using Unicode:
-  ❤️ HP  ████████░░ 80/100   ⚔️ Lv 2
-  🎒 Inventory: [items]
+  ❤️ HP  ████████░░ 80/100   ⚔️ Lv 2   ✨ XP 140/200
+  🎒 Inventory: [newest 5 items, then "+N more" if there are others]
+The bar is always 10 blocks, one per 10% of max HP.
 
 BOSS ENCOUNTER (after the 3 questions):
 - Before the quiz starts, silently review the diff for the single most questionable thing: a bug risk, unhandled edge case, security issue, performance trap, or unclear logic. Do not mention it until the boss appears.
@@ -66,7 +67,7 @@ BOSS ENCOUNTER (after the 3 questions):
   - Rejected: damage, then the rewrite quest below.
 - CONCEDE or rejected defense: assign a REWRITE QUEST. Describe the problem and what a fix needs to handle, but do not write the fix. The user writes it. When they say "quest done," review their fix: slay the boss for XP, or the boss counterattacks with what's still wrong.
 
-END: final level, how well confidence matched reality, and one file:line worth revisiting. Include a one-line trend from the log (see below) once it has 10+ entries, e.g. "Lifetime: at confidence 5 you're right 60% of the time."
+END: final level and XP (announce any level-ups gained this run), how well confidence matched reality, and one file:line worth revisiting. Include a one-line trend from the log (see below) once it has 10+ entries, e.g. "Lifetime: at confidence 5 you're right 60% of the time."
 
 CALIBRATION LOG:
 - Right after grading each answer (not at the end, so quitting midway still counts), append one JSON line to `~/.claude/quiz/log.jsonl` using Bash (`mkdir -p ~/.claude/quiz` first). Do this silently; don't narrate it.
@@ -75,6 +76,16 @@ CALIBRATION LOG:
 - If the write fails, mention it in one line and carry on with the quiz.
 
 STATS: if $ARGUMENTS is exactly `stats`, skip the quiz entirely. Do NOT read the raw log into context. Compute the numbers with one shell command (`jq` if available, otherwise `python3`) and work from its output only. Show: total runs and questions, accuracy overall and per confidence level 1-5 (flag overconfidence where high-confidence accuracy is below ~70%, and underconfidence where low-confidence accuracy is above ~70%), boss record (defended/conceded), and the 3 files that appear most in wrong answers. If the log is missing or has fewer than 5 entries, say so and stop. Don't pad with made-up numbers.
+
+HERO (persistent character), stored in `~/.claude/quiz/hero.json`:
+- Shape: `{"level": 1, "xp": 0, "runs": 0, "bosses_slain": 0, "mimics_slain": 0, "titles": [], "inventory": []}`. If the file is missing or unreadable, start a fresh hero and create it on the first save.
+- Max HP is 100 + 10 per level above 1. HP is restored to full at the start of every run; it does not persist. Reaching 0 HP ends the run with a "you have fallen" recap of what to review. XP and loot earned so far are kept (death costs nothing permanent).
+- XP: correct +10 (+5 if hinted), wrong +2, skipped 0. Boss pacified or slain: minor +15, major +30, critical +50. Mimic slain: +40. Safe realm (no boss): +10.
+- Level-up: when `xp` reaches `100 × current level`, gain a level and subtract that amount from `xp` (keep the remainder). On a level-up, restore HP to the new max, with a short fanfare. The XP shown in the DISPLAY line is `xp/(100 × level)`.
+- Inventory: every loot item awarded is saved by name (absurd, unique, with tier or flavor, e.g. "Vorpal Rebase of Eternal Merge Conflicts"). Never reuse a name already in the inventory. Titles (e.g. "Mimic Slayer") go in `titles`.
+- Save after each graded answer, in the same Bash call as the log append. Update with `jq` or `python3` so the JSON stays valid; never hand-edit the whole file. Increment `runs` once per run, on the first save. If the save fails, mention it in one line and carry on.
+- `/quiz hero`: skip the quiz. Read `hero.json` (small) and show a character sheet: level, XP to next level, max HP, titles, bosses and mimics slain, runs, and the full inventory. If there's no hero yet, say "No hero yet. Run /quiz to begin your journey."
+
 HELP (print exactly this, then stop):
 ```
 /quiz — RPG teach-back quiz on your own changes
@@ -92,6 +103,7 @@ USAGE
   /quiz src/auth/          only changes under a path
   /quiz easy | hard        easy = all multiple choice, hard = no warm-up
   /quiz feature/login hard combine a target with a difficulty
+  /quiz hero               your character sheet: level, XP, titles, loot
   /quiz stats              your calibration (accuracy vs confidence)
   /quiz help               this screen
 
@@ -106,4 +118,6 @@ DURING A QUIZ
 LIMITS
   Large diffs are capped at 5 files / 300 lines each to keep it cheap.
   Your results log to ~/.claude/quiz/log.jsonl.
+  Your hero (level, XP, loot) is saved in ~/.claude/quiz/hero.json.
+  HP resets every run; level, XP, and loot persist. Dying costs nothing.
 ```
